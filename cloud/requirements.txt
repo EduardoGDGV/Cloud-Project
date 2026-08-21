@@ -1,0 +1,6 @@
+kafka-python
+pymongo
+paho-mqtt
+flask
+werkzeug
+datetime

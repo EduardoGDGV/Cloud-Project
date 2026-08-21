@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Monitoramento Arduino</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .chart-container {
+            position: relative;
+            margin: 20px 0;
+            height: 400px;
+        }
+        .info-panel {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .last-update {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .user-info {
+            margin-bottom: 15px;
+            text-align: right;
+            font-size: 14px;
+            color: #555;
+        }
+        .user-info a {
+            color: #007bff;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+        .user-info a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="user-info">
+            Usuário logado: <strong>{{ session['username'] }}</strong>
+            | <a href="/logout">Sair</a>
+        </div>
+
+        <h1>Monitoramento de Temperatura e Umidade</h1>
+
+        <div class="info-panel">
+            <p>Última atualização: <span class="last-update" id="lastUpdate"></span></p>
+            <p>Total de registros: <span id="totalRecords"></span></p>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="lineChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="barChartTemp"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="barChartUmid"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const serverData = {
+            labels: {{ labels|tojson|safe }},
+            temperaturas: {{ temperaturas|tojson|safe }},
+            umidades: {{ umidades|tojson|safe }},
+            last_update: {{ last_update|tojson|safe }},
+            dadosBase: {{ dadosBase|tojson|safe }}
+        };
+
+        // Mostrar data e hora da última atualização
+        document.getElementById('lastUpdate').textContent = serverData.last_update;
+        document.getElementById('totalRecords').textContent = serverData.labels.length;
+
+        // Pega os últimos 100 registros para exibir nos gráficos
+        const sliceStart = Math.max(0, serverData.labels.length - 100);
+        const recentLabels = serverData.labels.slice(sliceStart);
+        const recentTemperaturas = serverData.temperaturas.slice(sliceStart);
+        const recentUmidades = serverData.umidades.slice(sliceStart);
+
+        const tempMin = Math.min(...recentTemperaturas);
+        const tempMax = Math.max(...recentTemperaturas);
+        const umidMin = Math.min(...recentUmidades);
+        const umidMax = Math.max(...recentUmidades);
+
+        // Gráfico de linha
+        new Chart(
+            document.getElementById('lineChart').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: recentLabels,
+                    datasets: [
+                        {
+                            label: 'Temperatura (°C)',
+                            data: recentTemperaturas,
+                            borderColor: 'rgb(255, 99, 132)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            yAxisID: 'y',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Umidade (%)',
+                            data: recentUmidades,
+                            borderColor: 'rgb(54, 162, 235)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            yAxisID: 'y1',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Data/Hora'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            suggestedMin: tempMin - 1,
+                            suggestedMax: tempMax + 1,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: false,
+                            suggestedMin: umidMin - 1,
+                            suggestedMax: umidMax + 1,
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'Umidade (%)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y}`;
+                                },
+                                afterLabel: function(context) {
+                                    return `Horário: ${recentLabels[context.dataIndex]}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        );
+
+        // Gráfico de barras - Temperatura
+        new Chart(
+            document.getElementById('barChartTemp').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels: recentLabels,
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: recentTemperaturas,
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Data/Hora'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            suggestedMin: tempMin - 1,
+                            suggestedMax: tempMax + 1,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            }
+                        }
+                    }
+                }
+            }
+        );
+
+        // Gráfico de barras - Umidade
+        new Chart(
+            document.getElementById('barChartUmid').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels: recentLabels,
+                    datasets: [{
+                        label: 'Umidade (%)',
+                        data: recentUmidades,
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Data/Hora'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            suggestedMin: umidMin - 1,
+                            suggestedMax: umidMax + 1,
+                            title: {
+                                display: true,
+                                text: 'Umidade (%)'
+                            }
+                        }
+                    }
+                }
+            }
+        );
+
+        // Atualização automática
+        setInterval(() => location.reload(), 10000);
+    </script>
+
+</body>
+</html>
